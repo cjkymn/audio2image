@@ -1,0 +1,32 @@
+Data format requirements :
+- imgs can be saved in any size, any number for vids
+- Q : in each folder? what naming?
+
+1. donkey_folder_txt.lua
+ - Q :  Why do we need decoder?
+ - Change file names from txt to aux for better reading comprehension
+ - Either random sampling or just scale it (trainHook)
+
+2. data.lua
+- line 24 : donkey_file change
+
+3. main_cls_int.lua
+- opt: data_root, classnames, trainids, checkpoint_dir, txtSize, nt
+- Change network so that it can take in audio features instead of text
+
+4. CONFIG
+- Add data sources
+
+----------------------------------------------------------------
+ChangedVariables
+
+[opt]
+numCaption => numAudio
+txtSize => auxSize
+nt => na
+
+
+----------------------------------------------------------------
+classnames : 1->first class 2->second class, etc.
+files : 1-> files under directory named as first class, under opt.data_root
+trainids : 1->first id in opt.trainids file
