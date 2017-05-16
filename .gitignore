@@ -1,2 +1,4 @@
 ./soundnet/models/*
 ./soundnet/soundnet_models_public/*
+./audio2image/results/*
+./audio2image/*.ipynb

@@ -10,24 +10,25 @@ require 'torch'
 require 'nn'
 require 'nngraph'
 require 'optim'
+require 'cudnn'
 
 opt = {
    numAudio = 1, -- Number of audio samples per image
    replicate = 0, -- TODO : Could change this (if 1, then replicate averaged text features numAudio times.)
-   save_every = 100,
+   save_every = 1,
    print_every = 1,
    dataset = 'instruments',       -- imagenet / lsun / folder
    no_aug = 0,
-   img_dir = '',
+   img_dir = '/idata/cs189/data/audio2image/data/instruments/ucfframes',
    keep_img_frac = 1.0,
    interp_weight = 0,
    interp_type = 1,
    cls_weight = 0,
    filenames = '',
-   data_root = '/idata/cs189/data/audio2image/audio2image/data/instruments/ucfaudio',
-   classnames = '/idata/cs189/data/audio2image/audio2image/data/instruments/allclasses.txt',
-   trainids = '/idata/cs189/data/audio2image/audio2image/data/instruments/allids.txt',
-   checkpoint_dir = '/idata/cs189/data/audio2image/audio2image/checkpoints',
+   data_root = '/idata/cs189/data/audio2image/data/instruments/ucfaudionorm',
+   classnames = '/idata/cs189/data/audio2image/data/instruments/allclasses.txt',
+   trainids = '/idata/cs189/data/audio2image/data/instruments/allids.txt',
+   checkpoint_dir = '/idata/cs189/data/audio2image/checkpoints',
    numshot = 0,
    batchSize = 64,
    doc_length = 201,
@@ -48,11 +49,11 @@ opt = {
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
    gpu = 2,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'experiment_long',
+   name = 'normalized_vec',
    noise = 'normal',       -- uniform / normal
    init_g = '',
    init_d = '',
-   use_cudnn = 0,
+   use_cudnn = 1,
 }
 
 -- one-line argument parser. parses enviroment variables to override the defaults
@@ -73,7 +74,7 @@ torch.setnumthreads(1)
 torch.setdefaulttensortype('torch.FloatTensor')
 
 -- create data loader
-local DataLoader = paths.dofile('data/data.lua')
+local DataLoader = paths.dofile('data/a2i_data.lua')
 local data = DataLoader.new(opt.nThreads, opt.dataset, opt)
 print("Dataset: " .. opt.dataset, " Size: ", data:size())
 ----------------------------------------------------------------------------
@@ -136,7 +137,7 @@ if opt.init_g == '' then
     netG:add(nn.CAddTable())
     netG:add(nn.ReLU(true))
 
-  -- state size: (ngf*8) x 4 x 4
+  -- state size: (ngf*8) x 4 x c
   netG:add(SpatialFullConvolution(ngf * 8, ngf * 4, 4, 4, 2, 2, 1, 1))
   netG:add(SpatialBatchNormalization(ngf * 4))
 
@@ -157,7 +158,7 @@ if opt.init_g == '' then
     netG:add(nn.CAddTable())
     netG:add(nn.ReLU(true))
 
-  -- state size: (ngf*4) x 8 x 8
+      -- state size: (ngf*4) x 8 x 8
   netG:add(SpatialFullConvolution(ngf * 4, ngf * 2, 4, 4, 2, 2, 1, 1))
   netG:add(SpatialBatchNormalization(ngf * 2)):add(nn.ReLU(true))
 
@@ -197,11 +198,14 @@ if opt.init_d == '' then
     local conv = nn.Sequential()
     conv:add(SpatialConvolution(ndf * 8, ndf * 2, 1, 1, 1, 1, 0, 0))
     conv:add(SpatialBatchNormalization(ndf * 2)):add(nn.LeakyReLU(0.2, true))
+    -- state size : (ndf * 2) x 4 x 4
     conv:add(SpatialConvolution(ndf * 2, ndf * 2, 3, 3, 1, 1, 1, 1))
     conv:add(SpatialBatchNormalization(ndf * 2))
     conv:add(nn.LeakyReLU(0.2, true))
+    -- state size : (ndf * 2) x 4 x 4
     conv:add(SpatialConvolution(ndf * 2, ndf * 8, 3, 3, 1, 1, 1, 1))
     conv:add(SpatialBatchNormalization(ndf * 8))
+    -- state size : (ndf * 8) x 4 x 4
     conc:add(nn.Identity())
     conc:add(conv)
     convD:add(conc)
@@ -224,6 +228,7 @@ if opt.init_d == '' then
   -- state size: (ndf*8 + 128) x 4 x 4
   netD:add(SpatialConvolution(ndf * 8 + opt.na, ndf * 8, 1, 1)) -- filters of (Text + features from img) combined
   netD:add(SpatialBatchNormalization(ndf * 8)):add(nn.LeakyReLU(0.2, true))
+  -- state size: (ndf*8) x 4 x 4
   netD:add(SpatialConvolution(ndf * 8, 1, 4, 4)) -- One final layer
   netD:add(nn.Sigmoid()) -- Scalar, probability
   -- state size: 1 x 1 x 1
@@ -282,6 +287,7 @@ local noise = torch.Tensor(opt.batchSize, nz, 1, 1)
 local noise_interp = torch.Tensor(opt.batchSize * 3/2, nz, 1, 1)
 local label = torch.Tensor(opt.batchSize)
 local label_interp = torch.Tensor(opt.batchSize * 3/2)
+local stats = torch.zeros(math.floor(math.min(data:size(), opt.ntrain) / opt.batchSize)*opt.niter,6)
 local errD, errG, errW
 local epoch_tm = torch.Timer()
 local tm = torch.Timer()
@@ -435,6 +441,7 @@ for epoch = 1, opt.niter do
     optimStateG.learningRate = optimStateG.learningRate * opt.lr_decay
     optimStateD.learningRate = optimStateD.learningRate * opt.lr_decay
   end
+  local statIndex = 1
 
   for i = 1, math.min(data:size(), opt.ntrain), opt.batchSize do
     tm:reset()
@@ -446,14 +453,25 @@ for epoch = 1, opt.niter do
 
     -- logging
     if ((i-1) / opt.batchSize) % opt.print_every == 0 then
-      print(('[%d][%d/%d] T:%.3f  DT:%.3f lr: %.4g '
-                .. '  Err_G: %.4f  Err_D: %.4f Err_W: %.4f'):format(
-              epoch, ((i-1) / opt.batchSize),
-              math.floor(math.min(data:size(), opt.ntrain) / opt.batchSize),
-              tm:time().real, data_tm:time().real,
-              optimStateG.learningRate,
-              errG and errG or -1, errD and errD or -1,
-              errW and errW or -1))
+        printString = ('[%d][%d/%d] T:%.3f  DT:%.3f lr: %.4g '
+                  .. '  Err_G: %.4f  Err_D: %.4f Err_W: %.4f'):format(
+                epoch, ((i-1) / opt.batchSize),
+                math.floor(math.min(data:size(), opt.ntrain) / opt.batchSize),
+                tm:time().real, data_tm:time().real,
+                optimStateG.learningRate,
+                errG and errG or -1, errD and errD or -1,
+                errW and errW or -1)
+        print(printString)
+        local iterStep = ((i-1) / opt.batchSize)
+        stats[statIndex][1] = epoch
+        stats[statIndex][2] = iterStep
+        stats[statIndex][3] = optimStateG.learningRate
+        stats[statIndex][4] = errG and errG or -1
+        stats[statIndex][5] = errD and errD or -1
+        stats[statIndex][6] = errW and errW or -1
+
+        statIndex = statIndex + 1
+
       local fake = netG.output
       disp.image(fake:narrow(1,1,opt.batchSize), {win=opt.display_id, title=opt.name})
       disp.image(real_img, {win=opt.display_id * 3, title=opt.name})
@@ -461,9 +479,12 @@ for epoch = 1, opt.niter do
   end
   if epoch % opt.save_every == 0 then
     paths.mkdir(opt.checkpoint_dir)
+
+    print('Saving at ' ..opt.checkpoint_dir)
     torch.save(opt.checkpoint_dir .. '/' .. opt.name .. '_' .. epoch .. '_net_G.t7', netG)
     torch.save(opt.checkpoint_dir .. '/' .. opt.name .. '_' .. epoch .. '_net_D.t7', netD)
     torch.save(opt.checkpoint_dir .. '/' .. opt.name .. '_' .. epoch .. '_opt.t7', opt)
+    torch.save(opt.checkpoint_dir .. '/' .. opt.name .. '_' .. epoch .. '_stats.t7',stats)
     print(('End of epoch %d / %d \t Time Taken: %.3f'):format(
            epoch, opt.niter, epoch_tm:time().real))
   end

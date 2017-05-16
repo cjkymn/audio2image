@@ -19,4 +19,4 @@ COCO_META_DIR=/home/reedscot/data/coco/train2014_ex_t7
 COCO_NET_TXT=/home/reedscot/checkpoints/coco_gru18_bs64_cls0.5_ngf128_ndf128_a10_c512_80_net_T.t7
 
 # location to save checkpoints
-CHECKPOINT_DIR=/idata/cs189/data/audio2image/audio2image/checkpoints2
+CHECKPOINT_DIR=/idata/cs189/data/audio2image/data/instruments/checkpoints

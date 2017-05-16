@@ -21,12 +21,8 @@ function data.new(n, dataset_name, opt_)
   end
 
   local donkey_file
-  if dataset_name == 'cub' or dataset_name == 'flowers' then
-    donkey_file = 'donkey_folder_txt.lua'
-  elseif dataset_name == 'coco' then
-    donkey_file = 'donkey_folder_coco.lua'
-  elseif dataset_name == 'coco_txt' then
-    donkey_file = 'donkey_folder_txt_coco.lua'
+  if dataset_name == 'instruments' then
+    donkey_file = 'a2i_donkey_folder_txt.lua'
   else
     error('Unknown dataset: ' .. dataset_name)
   end
@@ -98,4 +94,3 @@ function data:size()
 end
 
 return data
-

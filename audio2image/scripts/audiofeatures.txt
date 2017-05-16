@@ -1,0 +1,10 @@
+PlayingCello/v_PlayingCello_g01_c01.avi.wav_2.t7
+PlayingCelloTest/v_PlayingCello_g01_c01.avi.wav_1.t7
+PlayingDaf/v_PlayingDaf_g01_c01.avi.wav_2.t7
+PlayingDafTest/v_PlayingDaf_g01_c01.avi.wav_1.t7
+PlayingDhol/v_PlayingDhol_g01_c01.avi.wav_15.t7
+PlayingDholTest/v_PlayingDhol_g01_c01.avi.wav_1.t7
+PlayingFlute/v_PlayingFlute_g01_c01.avi.wav_13.t7
+PlayingFluteTest/v_PlayingFlute_g01_c01.avi.wav_1.t7
+PlayingSitar/v_PlayingSitar_g01_c01.avi.wav_6.t7
+PlayingSitarTest/v_PlayingSitar_g01_c01.avi.wav_1.t7

@@ -1,4 +1,4 @@
-auxdata_aux1require 'image'
+require 'image'
 dir = require 'pl.dir'
 
 trainLoader = {}
@@ -149,9 +149,9 @@ function trainLoader:sample_no_repl(quantity)
     local info1 = torch.load(t7file1)
     local info2 = torch.load(t7file2)
 
-    local img_file1 = opt.img_dir .. '/' .. info1.img_name   -- Load the image from image diretory
+    local img_file1 = opt.img_dir .. '/'..classnames[id1] ..'/'.. info1.img_name   -- Load the image from image diretory
     local img1 = trainHook(img_file1)
-    local img_file2 = opt.img_dir .. '/' .. info2.img_name
+    local img_file2 = opt.img_dir .. '/'..classnames[id2] ..'/' .. info2.img_name
     local img2 = trainHook(img_file2)
 
     for s = 1, opt.numAudio do
@@ -210,9 +210,9 @@ function trainLoader:sample_repl(quantity)
     local info1 = torch.load(t7file1)
     local info2 = torch.load(t7file2)
 
-    local img_file1 = opt.img_dir .. '/' .. info1.img_name
+    local img_file1 = opt.img_dir .. '/'..classnames[id1] ..'/'.. info1.img_name   -- Load the image from image diretory
     local img1 = trainHook(img_file1)
-    local img_file2 = opt.img_dir .. '/' .. info2.img_name
+    local img_file2 = opt.img_dir .. '/'..classnames[id2] ..'/'.. info1.img_name   -- Load the image from image diretory
     local img2 = trainHook(img_file2)
     local ix_aux1 = torch.randperm(info1[1]:t():size(1))[1]
 
