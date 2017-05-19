@@ -1,5 +1,5 @@
 # instrument related data
-INST_IMG_DIR=/idata/cs189/data/audio2image/data/instruments/ucfframes
+INST_IMG_DIR=/idata/cs189/data/audio2image/data/instruments/ucfimages
 INST_META_DIR=/idata/cs189/data/audio2image/data/instruments
 #INST_NET_TXT=/idata/cs189/data/audio2image/text2image/lm_sje_nc4_cub_hybrid_gru18_a1_c512_0.00070_1_10_trainvalids.txt_iter30000.t7
 

@@ -67,12 +67,13 @@ for line in io.lines(opt.trainids) do
 end
 
 --------------------------------------------------------------------------------------------
-local loadSize   = {3, opt.loadSize}
+--local loadSize   = {3, opt.loadSize}
+local loadSize   = {3, opt.loadSizeX, opt.loadSizeY}
 local sampleSize = {3, opt.fineSize}
 
 local function loadImage(path)
   local input = image.load(path, 3, 'float')
-  input = image.scale(input, loadSize[2], loadSize[2])
+  input = image.scale(input, loadSize[2], loadSize[3])
   return input
 end
 

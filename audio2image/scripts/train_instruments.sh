@@ -1,7 +1,7 @@
 . CONFIG
 
 ID=2
-GPU=3
+GPU=2
 NC=4
 CLS=0.5
 INT=1.0
@@ -24,7 +24,7 @@ data_root=${INST_META_DIR} \
 classnames=${INST_META_DIR}/allclasses.txt \
 trainids=${INST_META_DIR}/trainvalids.txt \
 #init_t=${INST_NET_TXT} \
-nThreads=6 \
+nThreads=12 \
 checkpoint_dir=${CHECKPOINT_DIR} \
 numCaption=${NC} \
 print_every=4 \

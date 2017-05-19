@@ -15,15 +15,15 @@ require 'cudnn'
 opt = {
    numAudio = 1, -- Number of audio samples per image
    replicate = 0, -- TODO : Could change this (if 1, then replicate averaged text features numAudio times.)
-   save_every = 1,
+   save_every = 50,
    print_every = 1,
    dataset = 'instruments',       -- imagenet / lsun / folder
    no_aug = 0,
-   img_dir = '/idata/cs189/data/audio2image/data/instruments/ucfframes',
+   img_dir = '/idata/cs189/data/audio2image/data/instruments/ucfimages',
    keep_img_frac = 1.0,
-   interp_weight = 0,
+   interp_weight = 1,
    interp_type = 1,
-   cls_weight = 0,
+   cls_weight = 0.5,
    filenames = '',
    data_root = '/idata/cs189/data/audio2image/data/instruments/ucfaudionorm',
    classnames = '/idata/cs189/data/audio2image/data/instruments/allclasses.txt',
@@ -33,23 +33,25 @@ opt = {
    batchSize = 64,
    doc_length = 201,
    loadSize = 76,
+   loadSizeX = 96,
+   loadSizeY = 72,
    auxSize = 1024,         -- #  of dim for raw text.
    fineSize = 64,
    na = 128,               -- #  of dim for audio features.
    nz = 100,               -- #  of dim for Z
    ngf = 128,              -- #  of gen filters in first conv layer
    ndf = 64,               -- #  of discrim filters in first conv layer
-   nThreads = 4,           -- #  of data loading threads to use
+   nThreads = 12,           -- #  of data loading threads to use
    niter = 1000,             -- #  of iter at starting learning rate
    lr = 0.0002,            -- initial learning rate for adam
    lr_decay = 0.5,            -- initial learning rate for adam
-   decay_every = 100,
+   decay_every = 50,
    beta1 = 0.5,            -- momentum term of adam
    ntrain = math.huge,     -- #  of examples per epoch. math.huge for full dataset
    display = 1,            -- display samples while training. 0 = false
    display_id = 10,        -- display window id.
    gpu = 2,                -- gpu = 0 is CPU mode. gpu=X is GPU mode on GPU X
-   name = 'normalized_vec',
+   name = '96by72_',
    noise = 'normal',       -- uniform / normal
    init_g = '',
    init_d = '',
@@ -277,12 +279,12 @@ local input_img = torch.Tensor(opt.batchSize, 3, opt.fineSize, opt.fineSize)
 -- Interpolation
 local input_img_interp = torch.Tensor(opt.batchSize * 3/2, 3, opt.fineSize, opt.fineSize)
 if opt.replicate == 1 then
-  input_txt_raw = torch.Tensor(opt.batchSize, opt.auxSize)
+  input_aux_raw = torch.Tensor(opt.batchSize, opt.auxSize)
 else
-  input_txt_raw = torch.Tensor(opt.batchSize * opt.numAudio, opt.auxSize)
+  input_aux_raw = torch.Tensor(opt.batchSize * opt.numAudio, opt.auxSize)
 end
-local input_txt = torch.Tensor(opt.batchSize, opt.auxSize)
-local input_txt_interp = torch.zeros(opt.batchSize * 3/2, opt.auxSize)
+local input_aux = torch.Tensor(opt.batchSize, opt.auxSize)
+local input_aux_interp = torch.zeros(opt.batchSize * 3/2, opt.auxSize)
 local noise = torch.Tensor(opt.batchSize, nz, 1, 1)
 local noise_interp = torch.Tensor(opt.batchSize * 3/2, nz, 1, 1)
 local label = torch.Tensor(opt.batchSize)
@@ -296,9 +298,9 @@ local data_tm = torch.Timer()
 if opt.gpu > 0 then
    input_img = input_img:cuda()
    input_img_interp = input_img_interp:cuda()
-   input_txt = input_txt:cuda()
-   input_txt_raw = input_txt_raw:cuda()
-   input_txt_interp = input_txt_interp:cuda()
+   input_aux = input_aux:cuda()
+   input_aux_raw = input_aux_raw:cuda()
+   input_aux_interp = input_aux_interp:cuda()
    noise = noise:cuda()
    noise_interp = noise_interp:cuda()
    label = label:cuda()
@@ -332,56 +334,56 @@ local fDx = function(x)
   -- train with real
   data_tm:reset(); data_tm:resume()
   -- TODO : what is getBatch doing??????
-  real_img, real_txt, wrong_img, _ = data:getBatch()
+  real_img, real_aux, wrong_img, _ = data:getBatch()
   data_tm:stop()
 
   input_img:copy(real_img)
-  input_txt_raw:copy(real_txt)
+  input_aux_raw:copy(real_aux)
   -- average adjacent text features in batch dimension.
-  emb_txt = netR:forward(input_txt_raw)
-  input_txt:copy(emb_txt)
+  emb_aux = netR:forward(input_aux_raw)
+  input_aux:copy(emb_aux)
 
   if opt.interp_type == 1 then -- This works well
     -- compute (a + b)/2
-    input_txt_interp:narrow(1,1,opt.batchSize):copy(input_txt)
-    input_txt_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):copy(input_txt:narrow(1,1,opt.batchSize/2))
-    input_txt_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):add(input_txt:narrow(1,opt.batchSize/2+1,opt.batchSize/2))
-    input_txt_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):mul(0.5)
+    input_aux_interp:narrow(1,1,opt.batchSize):copy(input_aux)
+    input_aux_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):copy(input_aux:narrow(1,1,opt.batchSize/2))
+    input_aux_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):add(input_aux:narrow(1,opt.batchSize/2+1,opt.batchSize/2))
+    input_aux_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):mul(0.5)
   elseif opt.interp_type == 2 then
     -- compute (a + b)/2
-    input_txt_interp:narrow(1,1,opt.batchSize):copy(input_txt)
-    input_txt_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):copy(input_txt:narrow(1,1,opt.batchSize/2))
-    input_txt_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):add(input_txt:narrow(1,opt.batchSize/2+1,opt.batchSize/2))
-    input_txt_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):mul(0.5)
+    input_aux_interp:narrow(1,1,opt.batchSize):copy(input_aux)
+    input_aux_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):copy(input_aux:narrow(1,1,opt.batchSize/2))
+    input_aux_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):add(input_aux:narrow(1,opt.batchSize/2+1,opt.batchSize/2))
+    input_aux_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):mul(0.5)
 
     -- add extrapolation vector.
     local alpha = torch.rand(opt.batchSize/2,1):mul(2):add(-1) -- alpha ~ uniform(-1,1)
     if opt.gpu >=0 then
      alpha = alpha:float():cuda()
     end
-    alpha = torch.expand(alpha,opt.batchSize/2,input_txt_interp:size(2))
-    local vec = (input_txt:narrow(1,opt.batchSize/2+1,opt.batchSize/2) -
-                input_txt:narrow(1,1,opt.batchSize/2)):cmul(alpha) -- elementwise multiplication
-    input_txt_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):add(vec)
+    alpha = torch.expand(alpha,opt.batchSize/2,input_aux_interp:size(2))
+    local vec = (input_aux:narrow(1,opt.batchSize/2+1,opt.batchSize/2) -
+                input_aux:narrow(1,1,opt.batchSize/2)):cmul(alpha) -- elementwise multiplication
+    input_aux_interp:narrow(1,opt.batchSize+1,opt.batchSize/2):add(vec)
   end
   label:fill(real_label)
 
-  local output = netD:forward{input_img, input_txt}
+  local output = netD:forward{input_img, input_aux}
   local errD_real = criterion:forward(output, label) -- error of real label
   local df_do = criterion:backward(output, label) -- backproapagation
-  netD:backward({input_img, input_txt}, df_do)
+  netD:backward({input_img, input_aux}, df_do)
 
   errD_wrong = 0
   if opt.cls_weight > 0 then
-    -- train with wrong image-txt pair
+    -- train with wrong image-aux pair
     input_img:copy(wrong_img)
     label:fill(fake_label)
 
-    local output = netD:forward{input_img, input_txt}
+    local output = netD:forward{input_img, input_aux}
     errD_wrong = opt.cls_weight*criterion:forward(output, label)
     local df_do = criterion:backward(output, label)
     df_do:mul(opt.cls_weight)
-    netD:backward({input_img, input_txt}, df_do)
+    netD:backward({input_img, input_aux}, df_do)
   end
 
   -- train with fake
@@ -390,17 +392,17 @@ local fDx = function(x)
   elseif opt.noise == 'normal' then
     noise:normal(0, 1)
   end
-  local fake = netG:forward{noise, input_txt}
+  local fake = netG:forward{noise, input_aux}
   input_img:copy(fake)
   label:fill(fake_label)
 
-  local output = netD:forward{input_img, input_txt}
+  local output = netD:forward{input_img, input_aux}
   local errD_fake = criterion:forward(output, label)
   local df_do = criterion:backward(output, label)
   local fake_weight = 1 - opt.cls_weight
   errD_fake = errD_fake*fake_weight
   df_do:mul(fake_weight)
-  netD:backward({input_img, input_txt}, df_do)
+  netD:backward({input_img, input_aux}, df_do)
 
   errD = errD_real + errD_fake + errD_wrong
   errW = errD_wrong
@@ -420,16 +422,16 @@ local fGx = function(x)
   elseif opt.noise == 'normal' then
     noise_interp:normal(0, 1)
   end
-  local fake = netG:forward{noise_interp, input_txt_interp}
+  local fake = netG:forward{noise_interp, input_aux_interp}
   input_img_interp:copy(fake)
   label_interp:fill(real_label) -- fake labels are real for generator cost
 
-  local output = netD:forward{input_img_interp, input_txt_interp}
+  local output = netD:forward{input_img_interp, input_aux_interp}
   errG = criterion_interp:forward(output, label_interp)
   local df_do = criterion_interp:backward(output, label_interp)
-  local df_dg = netD:updateGradInput({input_img_interp, input_txt_interp}, df_do)
+  local df_dg = netD:updateGradInput({input_img_interp, input_aux_interp}, df_do)
 
-  netG:backward({noise_interp, input_txt_interp}, df_dg[1])
+  netG:backward({noise_interp, input_aux_interp}, df_dg[1])
   return errG, gradParametersG
 end
 
